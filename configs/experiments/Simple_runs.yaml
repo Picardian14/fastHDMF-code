@@ -1,0 +1,73 @@
+# Test parameter sweep - minimal example
+simulation:
+  nb_steps: 200000  # Shorter for testing
+  obj_rate: 3.44
+  nvc_sigmoid: false
+  with_decay: true
+  with_plasticity: true  
+  TR: 1
+  flp: 0.01
+  fhp: 0.1
+  burnout: 8       
+  parallel: false
+  seed_strategy: unique_per_simulations
+
+data:  
+  test_mode: false  
+  max_subjects_test: 1
+  sc_root: "Averaged_SCs/aal"  
+output:
+  save_full_outputs: true  
+  results_dir: "AAL_HDMF_PAPER"
+  observables:    
+    - name: raw
+      signal: fic
+    - name: raw
+      signal: rates
+    - name: raw
+      signal: rates_inh
+    - name: raw
+      signal: bold
+    
+
+tasks_list:
+  - G: 1.05
+    lrj: 3.0
+  - G: 1.05
+    lrj: 50.0
+  - G: 1.05
+    lrj: 1500.0
+  - G: 2.1
+    lrj: 1.0
+  - G: 2.1
+    lrj: 3.0
+  - G : 2.1
+    lrj: 1500.0
+  - G: 2.55
+    lrj: 1.0
+  - G: 2.55
+    lrj: 25.0
+  - G: 2.55
+    lrj: 1500.0
+  - G: 3.55
+    lrj: 3.0
+  - G: 3.55
+    lrj: 40.0
+  - G: 3.55
+    lrj: 1500.0
+  - G: 4.55
+    lrj: 3.0
+  - G: 4.55
+    lrj: 50.0
+  - G: 4.55
+    lrj: 1500.0
+  - G: 3.55
+    lrj: 15.0
+  - G: 3.55
+    lrj: 80.0
+  - G: 3.55
+    lrj: 100.0
+
+experiment:
+  description: "Test matching TR to Siemens data"
+  version: "1.0"

@@ -1,0 +1,51 @@
+# Test parameter sweep - minimal example
+simulation:
+  nb_steps: 192  # Shorter for testing
+  obj_rate: 3.44
+  with_decay: false
+  with_plasticity: false  
+  TR: 2.4
+  flp: 0.01
+  fhp: 0.1
+  burnout: 8
+  over: 
+    #param_name: sc_matrix  # or 'param'
+    seed:  # or 'param'
+      fun: "np.arange"
+      #args: [1, 31, 1]      
+      args: [1, 16, 1]      
+    # Alternative using custom function:
+    # range: 
+    #   fun: "np.logspace"
+    #   args: [-1, 1, 32]  # 10^-1 to 10^1, 32 points
+    
+  parallel: true
+  averaged: true
+grid: 
+  alpha:
+    fun: "np.linspace"
+    args: [0.01, 1, 150]  # 10^0 to 10^4, 4 points
+    
+  G:
+    fun: "np.arange"
+    args: [0.1, 8.1, 0.05]  # 10^2 to 10^5, 110 points
+    
+data:  
+  test_mode: false  
+  max_subjects_test: 1
+  sc_root: "Averaged_SCs/schaefer200"  
+output:
+  save_full_outputs: true  
+  results_dir: "Schaefer200_HDMF_PAPER"
+  observables:
+    - name: fc
+      signal: bold
+    - name: fcd
+      signal: bold
+    - name: mean
+      signal: rates
+      
+  
+experiment:
+  description: "FC and FCD grid for Static DMF"
+  version: "1.0"

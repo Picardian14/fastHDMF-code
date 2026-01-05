@@ -1,0 +1,83 @@
+data:
+  max_subjects_test: 1
+  sc_root: "Averaged_SCs/aal"  
+  test_mode: false
+experiment:
+  description: Running 21 parameter combinations from HDMF top 15% overlap
+  version: '1.0'
+output:
+  observables:
+  - name: fc
+    params:
+      empirical_file: /network/iss/home/ivan.mindlin/Repos/fastHDMF/data/COMA_CNT_Empirical_FC.npy
+      reduce_to_fit: true
+    signal: bold
+  - name: fcd
+    params:
+      empirical_file: /network/iss/home/ivan.mindlin/Repos/fastHDMF/data/COMA_CNT_Empirical_FCD.npy
+      reduce_to_fit: true
+    signal: bold
+  save_full_outputs: true
+simulation:
+  G: 1.0
+  TR: 2.4
+  averaged: false
+  burnout: 8
+  fhp: 0.1
+  flp: 0.01
+  lr: 1.0
+  nb_steps: 192
+  obj_rate: 3.44
+  over:
+    seed:
+      args:
+      - 1
+      - 101
+      - 1
+      fun: np.arange
+  parallel: true
+  with_decay: true
+  with_plasticity: true
+tasks_list:
+- G: 2.150000000000001
+  lrj: 1.0
+- G: 2.2000000000000006
+  lrj: 1.0
+- G: 2.3000000000000007
+  lrj: 1.0
+- G: 2.150000000000001
+  lrj: 1.059560179277616
+- G: 2.250000000000001
+  lrj: 1.059560179277616
+- G: 2.2000000000000006
+  lrj: 1.1895340673703196
+- G: 2.250000000000001
+  lrj: 1.1895340673703196
+- G: 2.100000000000001
+  lrj: 1.2603829296797275
+- G: 2.250000000000001
+  lrj: 1.3354515629298989
+- G: 2.3000000000000007
+  lrj: 1.5885651294280527
+- G: 2.250000000000001
+  lrj: 1.6831803533309568
+- G: 2.450000000000001
+  lrj: 2.0022003718155847
+- G: 2.350000000000001
+  lrj: 2.1214517849106302
+- G: 2.350000000000001
+  lrj: 2.2478058335487257
+- G: 2.500000000000001
+  lrj: 2.2478058335487257
+- G: 2.600000000000001
+  lrj: 2.2478058335487257
+- G: 2.500000000000001
+  lrj: 2.673841615839947
+- G: 2.450000000000001
+  lrj: 3.0018358135755894
+- G: 2.500000000000001
+  lrj: 3.0018358135755894
+- G: 2.600000000000001
+  lrj: 3.18062569279412
+- G: 2.5500000000000007
+  lrj: 3.5707859649004634

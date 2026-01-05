@@ -1,0 +1,33 @@
+# Test parameter sweep - minimal example
+simulation:
+  nb_steps: 100000  # Shorter for testing
+  obj_rate: 3.44
+  with_decay: true
+  with_plasticity: true  
+  TR: 2.4
+  flp: 0.01
+  fhp: 0.1
+  burnout: 8
+  G: 2.55
+  lrj: 3.57
+  over: 
+    seed:  # or 'param'
+      fun: "np.arange"      
+      args: [1, 101, 1]      
+  parallel: true  
+  averaged: false
+ 
+data:  
+  test_mode: false  
+  max_subjects_test: 1
+  sc_root: "Averaged_SCs/aal"  
+output:
+  save_full_outputs: true  
+  results_dir: "AAL_HDMF_PAPER"
+  observables:
+    - name: gamma_entropy
+      signal: rates
+  
+experiment:
+  description: "100 repetitions where Dynamic HDMF is in the top 14% overlap between FC and FCD, calculate entropy "
+  version: "1.0"

@@ -1,0 +1,39 @@
+# Test parameter sweep - minimal example
+simulation:
+  nb_steps: 50000  # Shorter for testing
+  obj_rate: 3.44
+  with_decay: false
+  with_plasticity: false  
+  TR: 2.4
+  flp: 0.01
+  fhp: 0.1
+  burnout: 8
+  alpha: 0.75
+  over:     
+    # Alternative using custom function:
+    seed: 
+      fun: "np.arange"
+      args: [1, 31, 1]  # 10^-1 to 10^1, 32 points
+    
+  parallel: true
+grid: 
+  G:
+    fun: "np.arange"
+    args: [0.1, 8.1, 0.1]  # 10^0 to 10^2, 100 points
+  
+data:  
+  test_mode: false  
+  max_subjects_test: 1
+  sc_root: "Averaged_SCs/aal"    
+output:
+  save_full_outputs: true  
+  observables:
+    - name: mean
+      signal: rates
+    - name: mean
+      signal: fic
+      
+  
+experiment:
+  description: "Showing firing rate stability across G values in the static model"
+  version: "1.0"

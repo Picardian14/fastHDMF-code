@@ -1,0 +1,81 @@
+data:
+  max_subjects_test: 1
+  sc_root: "Averaged_SCs/aal"  
+  test_mode: false
+experiment:
+  description: Running 20 parameter combinations from DMF top 15% overlap
+  version: '1.0'
+output:
+  observables:
+  - name: fc
+    params:
+      empirical_file: /network/iss/home/ivan.mindlin/Repos/fastHDMF/data/COMA_CNT_Empirical_FC.npy
+      reduce_to_fit: true
+    signal: bold
+  - name: fcd
+    params:
+      empirical_file: /network/iss/home/ivan.mindlin/Repos/fastHDMF/data/COMA_CNT_Empirical_FCD.npy
+      reduce_to_fit: true
+    signal: bold
+  save_full_outputs: true
+simulation:
+  G: 1.0
+  TR: 2.4
+  alpha: 0.7
+  averaged: false
+  burnout: 8
+  fhp: 0.1
+  flp: 0.01
+  nb_steps: 192
+  obj_rate: 3.44
+  over:
+    seed:
+      args:
+      - 1
+      - 101
+      - 1
+      fun: np.arange
+  parallel: true
+  with_decay: false
+  with_plasticity: false
+tasks_list:
+- G: 1.6500000000000006
+  alpha: 0.6666834170854271
+- G: 1.7000000000000006
+  alpha: 0.6716582914572865
+- G: 1.8500000000000008
+  alpha: 0.7015075376884422
+- G: 1.9000000000000008
+  alpha: 0.7015075376884422
+- G: 1.9500000000000006
+  alpha: 0.7015075376884422
+- G: 1.9500000000000006
+  alpha: 0.7064824120603015
+- G: 2.0500000000000007
+  alpha: 0.7214070351758795
+- G: 2.100000000000001
+  alpha: 0.7214070351758795
+- G: 2.150000000000001
+  alpha: 0.731356783919598
+- G: 2.250000000000001
+  alpha: 0.7363316582914573
+- G: 2.350000000000001
+  alpha: 0.7413065326633166
+- G: 2.3000000000000007
+  alpha: 0.7462814070351759
+- G: 2.400000000000001
+  alpha: 0.7462814070351759
+- G: 2.400000000000001
+  alpha: 0.7512562814070352
+- G: 2.500000000000001
+  alpha: 0.7512562814070352
+- G: 2.600000000000001
+  alpha: 0.7612060301507538
+- G: 2.750000000000001
+  alpha: 0.7661809045226131
+- G: 2.750000000000001
+  alpha: 0.7711557788944724
+- G: 2.800000000000001
+  alpha: 0.7711557788944724
+- G: 2.900000000000001
+  alpha: 0.7761306532663317

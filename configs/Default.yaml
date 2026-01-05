@@ -1,0 +1,37 @@
+# Test parameter sweep - minimal example
+simulation:
+  nb_steps: 50000  # Shorter for testing
+  obj_rate: 3.44
+  with_decay: true
+  with_plasticity: true  
+  TR: 0.6
+  flp: 0.01
+  fhp: 0.1
+  burnout: 8
+  lrj: 1.13
+  G: 2.9    
+  parallel: false
+  seed: 1
+
+data:  
+  test_mode: false  
+  max_subjects_test: 1
+  sc_root: "Averaged_SCs/aal"    
+output:
+  results_dir: "EXAMPLES"
+  save_full_outputs: false  
+  observables:
+    - name: raw
+      signal: rates
+    - name: raw
+      signal: bold
+    - name: fc 
+      signal: bold
+    - name: raw
+      signal: fic
+    
+      
+  
+experiment:
+  description: "State-of-the-art DMF simulation with default parameters"
+  version: "1.0"
