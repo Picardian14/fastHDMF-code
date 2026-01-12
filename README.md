@@ -29,7 +29,7 @@ This repository provides:
 ### Prerequisites
 - **Boost C++ libraries** (with shared libraries compiled)
 - **Python 3.8+**
-- **Python packages**: numpy, pyyaml
+- **Python packages**: numpy, pyyaml, padnas, scipy
 - (Optional) SLURM cluster access for distributed simulations
 
 ### Setup
@@ -56,7 +56,51 @@ pip install -e .
 
 ## Usage
 
-### Running Experiments
+### Direct Python API
+
+The core simulation is run via the `dmf.run()` function. Example:
+
+```python
+import fastdyn_fic_dmf as dmf
+import numpy as np
+
+# Load structural connectivity
+C = np.loadtxt('data/SCs/Averaged_SCs/aal/healthy_average.csv', delimiter=',')
+C = 0.2 * C / np.max(C)
+N = C.shape[0]
+
+# Set target rate
+obj_rate = 3.44
+# Set plasticity parameters
+LR = 3.5 * np.ones(N)  # Learning rate per region
+DECAY = 10000
+ # Decay time constant per region
+## To note, these parameters can be set with the homeostatic rules that relates both paramters with DECAY = np.exp(a + np.log(LR) * b) 
+## The slope 'b' and and intercept 'a'  have to be found for the used connectivity matrix
+
+# Configure simulation parameters
+params = dmf.default_params(C=C, lrj=LR, taoj=DECAY)
+params['obj_rate'] = obj_rate
+params['with_decay'] = True      # Enable homeostatic decay
+params['with_plasticity'] = True  # Enable synaptic plasticity
+params['G'] = 3.5                 # Global coupling strength
+params['J'] = 0.75 * params['G'] * params['C'].sum(axis=0) + 1
+
+# Run simulation
+rates, rates_inh, bold, fic = dmf.run(params, nb_steps=50000)
+```
+
+**Key parameters:**
+- `with_decay`: Enable/disable homeostatic decay mechanism
+- `with_plasticity`: Enable/disable synaptic plasticity
+- `lrj`: Learning rate (scalar or per-region vector)
+- `taoj`: Decay time constant (scalar or per-region vector)
+
+See [examples.ipynb](notebooks/examples.ipynb) for detailed usage examples.
+
+### Running Experiments with Configuration Files
+
+The `fastHDMF.ExperimentManager` provides a YAML-based workflow for managing large-scale simulations and simplifying cluster job submissions. While the main simulation is performed by `dmf.run()`, this toolkit handles configuration, parallelization, and result aggregation.
 
 **Local execution:**
 ```bash
@@ -68,18 +112,17 @@ python -m fastHDMF.run_experiment <experiment_id> --config experiments/<config_n
 cd slurm
 ./submit_experiment_slurm_array.sh
 ```
-This will show the available experiments to run and let you define main SBATCH directives. 
+This will show the available experiments to run and let you define main SBATCH directives.
 
-
-### Configuration
-
-Experiments are defined via YAML files in `configs/`. Example structure:
+**Configuration example** (`configs/Default.yaml`):
 
 ```yaml
 simulation:
   nb_steps: 50000
   G: 2.9
   with_plasticity: true
+  with_decay: true
+  lrj: 3.5
   
 data:
   sc_root: "Averaged_SCs/aal"
@@ -90,7 +133,7 @@ output:
       signal: bold
 ```
 
-See `configs/Default.yaml` for all available parameters.
+See [configs/Default.yaml](configs/Default.yaml) for all available parameters.
 
 ---
 
