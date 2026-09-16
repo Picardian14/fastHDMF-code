@@ -24,33 +24,43 @@ This repository provides:
 
 ---
 
-## Installation
+## Docker installation (core simulator)
 
-### Prerequisites
-- **Boost C++ libraries** (with shared libraries compiled)
-- **Python 3.8+**
-- **Python packages**: numpy, pyyaml, padnas, scipy
-- (Optional) SLURM cluster access for distributed simulations
+The Docker image contains a matched Python 3.10, NumPy, Boost.Python, and
+Boost.NumPy environment. The host only needs Docker; it does not need Python,
+NumPy, Boost, or a compiler.
 
-### Setup
+Build the image from the repository root:
 
 ```bash
-# Clone the repository
-git clone https://github.com/[username]/fastHDMF-code.git
-cd fastHDMF-code
-
-# 1. Compile the C++ DMF extension
-cd dynamic_fic_dmf_Cpp
-python setup.py install
-cd ..
+docker build -t fastdyn-fic-dmf .
 ```
 
-> **⚠️ Important**: Before running `python setup.py install`, ensure that `setup.py` points to the correct Boost shared library (`.so`) files on your system. Follow the detailed installation instructions from the [original fastDMF repository](https://gitlab.com/concog/fastdmf) for guidance on locating and linking Boost libraries.
+Run the built-in two-node simulation to verify the image:
 
 ```bash
-# 2. Install the Python experiment management package
-pip install -e .
+docker run --rm fastdyn-fic-dmf
 ```
+
+To run your own script, mount its directory at `/work`. Because the image's
+entrypoint is Python, pass the script path and its arguments directly:
+
+```bash
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD:/work" \
+  fastdyn-fic-dmf simulation.py
+```
+
+The optional `--user` makes files created in `/work` belong to the current
+host user. To open an interactive Python prompt instead, run:
+
+```bash
+docker run --rm -it fastdyn-fic-dmf -i
+```
+
+This image intentionally installs only the `fastdyn_fic_dmf` simulator. The
+`fastHDMF` experiment and SLURM management package is not included.
 
 ---
 

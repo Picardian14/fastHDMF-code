@@ -4,7 +4,7 @@ results/
 slurm/outputs/
 slurm/errors/
 data/
-setup.py
+/setup.py
 *egg-link
 *.pkl
 *.out
