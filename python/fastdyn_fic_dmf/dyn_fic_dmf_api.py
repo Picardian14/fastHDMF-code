@@ -81,8 +81,19 @@ def default_params(**kwargs):
     params['g_i']        = 0.087    # inhibitory non linear shape parameter
     params['Ii']        = 177/615  # inhibitory threshold for nonlinearity
     params['ci']       = 615.     # inhibitory conductance
-    params['wgaine']    = 0        # neuromodulatory gain
-    params['wgaini']    = 0        # neuromodulatory gain
+    params['wgaine']    = 0        # neuromodulatory gain (initial value)
+    params['wgaini']    = 0        # neuromodulatory gain (initial value)
+    # Dynamic gain (OU random walk with decay, shared noise for E and I)
+    params['with_dynamic_gain'] = False
+    params['tau_wgain']         = 50000   # ms, decay time constant
+    params['sigma_wgain']       = 0.0     # noise SD for dynamic gain
+    # Optional: feed a precomputed gain time series (one value per dt micro-step,
+    # i.e. length = nb_steps * steps_per_millisec = nb_steps / dt). When
+    # `use_gain_ts=True`, the simulator reads wgaine/wgaini from this array
+    # instead of generating an OU trajectory; values are shared between E and I.
+    params['use_gain_ts'] = False
+    params['gain_ts']     = np.array([0.0])
+    params['gain_ts_len'] = 1
     params['lr_scaling'] = 0
     params['G']         = 2        # Global Coupling Parameter
     
@@ -142,6 +153,12 @@ def run(params, nb_steps):
     out : list
         Simulated activity of the DMF model. Returns excitatory rates, inhibitory rates, bold activity and average FIC time series
     """
+
+    # If a controlled gain time series was provided, sync its length field.
+    if params.get('use_gain_ts', False):
+        gain_ts = np.asarray(params['gain_ts'], dtype=float).ravel()
+        params['gain_ts'] = gain_ts
+        params['gain_ts_len'] = int(gain_ts.size)
 
     # Pre-allocate memory for results
     N = params['C'].shape[0]

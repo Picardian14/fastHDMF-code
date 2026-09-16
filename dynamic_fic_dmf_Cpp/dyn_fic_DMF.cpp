@@ -1,211 +1,550 @@
 /**
- * C mex interface to fast DMF simulator to generate BOLD signals. See
- * README.md and DMF.hpp for details.
+ * Optimised C++ implementation of the Dynamic Mean Field (DMF) model with a
+ * BOLD Balloon-Windkessel model.
  *
  * Pedro Mediano, Apr 2020
  */
 
-#include "mex.h"
-#include "./dyn_fic_DMF.hpp"
+#ifndef DMF_H
+#define DMF_H
+
 #include<string>
+#include<thread>
+#include<iostream>
+#include<random>
+#include<map>
+using namespace std;
+#include "Eigen/Dense"
+
+typedef std::map<std::string, const double*> ParamStruct;
 
 /**
- * Cross-platform way of getting the pointer to the raw data in a mxArray. Uses
- * preprocessor directives to switch between pre- and post-2017 mex functions.
+ * Simple utility struct to pass ranges of integer values.
  *
- * NOTE: assumes that the array has doubles, but does not explicitly check.
+ * Example usage:
+ *
+ * int start=0, end=0;
+ * Range r(start, end);
  *
  */
-double* safeGet(const mxArray* a) {
-    double *p;
-    #if MX_HAS_INTERLEAVED_COMPLEX
-    p = mxGetDoubles(a);
-    #else
-    p = mxGetPr(a);
-    #endif
-    return p;
+struct Range {
+    size_t start, end;
+    Range(size_t s, size_t e) : start(s), end(e) {}
+};
+
+
+/**
+ * Clip value of double between 0 and 1.
+ */
+inline double clip(double x) {
+    return x > 1 ? 1 : (x < 0 ? 0 : x);
 }
 
 
 /**
- * Converts a Matlab struct with double fields into a std::map, keeping
- * pointers to all arrays without making any deep copies.
+ * Retrieves a field from a ParamStruct and makes sure that result is an array
+ * of size N. If the content of the field is a scalar, it constructs a constant
+ * array.
  *
- * In addition, for each field `f` adds a field named `isvector_$f` which
- * contains a null pointer if `f` points to a 1x1 Matlab scalar, or a non-null
- * pointer otherwise.
- *
- * @param structure_array_ptr pointer to Matlab-like struct
- * @return ParamStruct containing pointers to the Matlab array data
+ * @param params
+ * @param field name of field to be retrieved
+ * @param N expected size of the array
  */
-ParamStruct struct2map(const mxArray *structure_array_ptr) {
-    mwSize total_num_of_elements;
-    int number_of_fields, field_index;
-    const char  *field_name;
-    const mxArray *field_array_ptr;
-    ParamStruct p;
-    double *x;
+Eigen::ArrayXd ensureArray(const ParamStruct &params, std::string field, size_t N) {
 
-    total_num_of_elements = mxGetNumberOfElements(structure_array_ptr);
-    number_of_fields = mxGetNumberOfFields(structure_array_ptr);
+    // Initialise array and field name string
+    Eigen::ArrayXd A;
+    std::string isvecf("isvector_");
+    isvecf.append(field);
 
-    for (field_index=0; field_index<number_of_fields; field_index++)  {
-        field_name = mxGetFieldNameByNumber(structure_array_ptr, field_index);
-        field_array_ptr = mxGetFieldByNumber(structure_array_ptr,
-                                             0, field_index);
-        x = safeGet(field_array_ptr);
-        p[field_name] = x;
+    if (params.at(isvecf.c_str())) {
+        // Map the Eigen::Array to field if it is listed as a vector
+        A = Eigen::Map<const Eigen::ArrayXd>(params.at(field.c_str()), N);
 
-        std::string buffer("isvector_");
-        buffer.append(field_name);
-        bool isvector = mxGetN(field_array_ptr) > 1 || mxGetM(field_array_ptr) > 1;
-        p[buffer] = isvector ? x : NULL;
+    } else {
+        // Otherwise initialise and fill a constant array
+        A = Eigen::ArrayXd::Zero(N);
+        A.fill(params.at(field.c_str())[0]);
     }
 
-    try {
-      // Use checkParams to validate and add backward compatibility
-      checkParams(p);
-    } catch (const std::invalid_argument& e) {
-      mexErrMsgIdAndTxt("DMF:invalidArgument", e.what());
-    }
-
-    return p;
+    return A;
 }
 
 
 /**
- * Check that input and output arguments to MEX function are valid.
+ * Checks input parameter structure has all necessary fields.
  *
- * Makes sure that 1) number and type of inputs is correct, 2) struct has
- * all necessary fields, and 3) number of outputs is correct. If arguments
- * are not valid, throws a Matlab error.
- *
- * @throws Matlab error if input or output arguments are invalid
+ * @param params
  */
-void checkArguments(int nlhs, mxArray *plhs[],
-                  int nrhs, const mxArray *prhs[]) {
-    // Check that number and type of inputs is correct
-    if(nrhs < 2 || nrhs > 3) {
-        mexErrMsgIdAndTxt("DMF:nrhs","Two or three inputs required.");
-    }
+void checkParams(const ParamStruct &params) {
 
-    /* make sure the first input argument is type struct */
-    if (!mxIsStruct(prhs[0])) {
-        mexErrMsgIdAndTxt("DMF:notStruct","First input must be a struct.");
-    }
-    
-    /* make sure the second input argument is type double */
-    if(!mxIsDouble(prhs[1])) {
-        mexErrMsgIdAndTxt("DMF:notDouble","Second input must be type double.");
-    }
-
-    // Make sure there are no empty arrays in struct
-    int nfields = mxGetNumberOfFields(prhs[0]);
-    for (int i = 0; i < nfields; i++) {
-      auto f = mxGetFieldByNumber(prhs[0], 0, i);
-      if (mxIsEmpty(f)) {
-        mexErrMsgIdAndTxt("DMF:badInputs", "Empty arrays not allowed in input struct.");
-      }
-    }
-    
-    ParamStruct params = struct2map(prhs[0]);
-    
-    // Calculate expected number of outputs based on return flags
-    int return_flags = DYN_FIC_DMFSimulator::calculateReturnFlags(params);
-    int expected_outputs = 0;
-    
-    if (return_flags & RETURN_RATE_E) expected_outputs++;
-    if (return_flags & RETURN_RATE_I) expected_outputs++;
-    if (return_flags & RETURN_BOLD) expected_outputs++;
-    if (return_flags & RETURN_FIC) expected_outputs++;
-    
-    if (nlhs != expected_outputs) {
-        mexErrMsgIdAndTxt("DMF:badOutputs", "Wrong number of output arguments.");
+    // Check that parameter struct has the necessary fields
+    std::vector<std::string> required_fields = {"C", "receptors", "dt",
+            "taon", "taog", "gamma", "sigma", "JN", "I0", "Jexte", "Jexti",
+            "w", "g_e", "Ie", "ce", "g_i", "Ii", "ci", "wgaine", "wgaini",
+            "G", "TR", "dtt", "batch_size",
+            "return_rate", "return_bold","return_fic",
+            "lrj","taoj","with_plasticity", "with_decay","obj_rate",
+            "nvc_sigmoid", "nvc_match_slope", "nvc_r0", "nvc_u50",
+            "with_dynamic_gain", "tau_wgain", "sigma_wgain",
+            "use_gain_ts", "gain_ts", "gain_ts_len",
+        }; // added ljr, taoj and obj_rate as parameters of fic dynamics
+    for (const auto& field : required_fields) {
+        if (!params.count(field.c_str())) {
+            std::string s("Missing field in parameter struct: ");
+            s.append(field);
+            throw std::invalid_argument(s);
+        }
     }
 }
 
 
 /**
- * Main function to call DMF from Matlab, using the C Mex interface.
+ * Integrator of firing rates to simulate BOLD signals
  */
-void mexFunction(int nlhs, mxArray *plhs[],
-                  int nrhs, const mxArray *prhs[]) {
-    checkArguments(nlhs, plhs, nrhs, prhs);
+class BOLDIntegrator {
 
-    // First input argument: parameter struct
-    ParamStruct params = struct2map(prhs[0]);
-    size_t N = (size_t) mxGetN(mxGetField(prhs[0], 0, "C"));
 
-    // Second input argument: number of steps
-    size_t nb_steps = (size_t) safeGet(prhs[1])[0];
+public:
+    // Balloon-Windkessel equation parameters
+    double taus  = 0.65;
+    double tauf  = 0.41;
+    double tauo  = 0.98;
+    double alpha = 0.32;
 
-    // Get return flags and plasticity mode
-    int return_flags = DYN_FIC_DMFSimulator::calculateReturnFlags(params);
-    PlasticityMode plasticity_mode = static_cast<PlasticityMode>(static_cast<int>(params["plasticity_mode"][0]));
-    
-    // Pre-allocate memory for results using Matlab's factory
-    size_t nb_steps_bold = nb_steps * params["dtt"][0] / params["TR"][0];
-    size_t batch_size = params["batch_size"][0];
+    double Eo = 0.4;
+    double TE = 0.04;
+    double vo = 0.04;
+    double k1 = 4.3*40.3*Eo*TE;
+    double k2 = 25*Eo*TE;
+    double k3 = 1;
 
-    // Create arrays only as needed, with appropriate sizes
-    mxArray *rate_e_res = NULL, *rate_i_res = NULL, *bold_res = NULL, *fic_res = NULL;
-    
-    // Always allocate minimum arrays needed for computation
-    if (return_flags & RETURN_RATE_E) {
-        rate_e_res = mxCreateDoubleMatrix(N, nb_steps, mxREAL);
+    double itaus  = 1/taus;
+    double itauf  = 1/tauf;
+    double itauo  = 1/tauo;
+    double ialpha = 1/alpha;
+    double dt;
+
+    // --- Neurovascular coupling (NVC) controls (inside integrator) ---
+    bool   nvc_sigmoid     = false;  // default: off -> original behavior
+    bool   nvc_match_slope = true;   // match small-signal gain at baseline
+    double nvc_r0          = 3.4;    // baseline firing-rate (Hz). If your r is already baseline-subtracted, set 0.0
+    double nvc_u50         = 15.0;   // half-saturation (Hz): compression starts in 15–30 Hz range
+    double nvc_umax        = 1.0;    // logistic asymptote (arbitrary units)
+    double nvc_k           = 0.25;   // logistic steepness (1/Hz). Larger -> sharper saturation
+
+
+    size_t N, save_every, nb_bold_steps, rate_buffer_size;
+    size_t count = 1;  // Start in 1 to match subsampling in Deco code
+    size_t b_idx = 0;
+    size_t i = 0;
+    std::thread th;
+
+    Eigen::Map<Eigen::MatrixXd> b;
+    Eigen::Map<Eigen::ArrayXXd> r;    
+    Eigen::Map<Eigen::ArrayXd> s, f, v, q;
+    Eigen::Map<Eigen::ArrayXd> ds, df, dv, dq;
+    Eigen::ArrayXd Z;
+    Eigen::ArrayXd dZ;
+
+    /**
+     * Construct integrator.
+     *
+     * @param params Matlab struct with all necessary parameters (see checkArguments)
+     * @param nb_rate_steps
+     * @param N_in
+     */
+    BOLDIntegrator(ParamStruct params, size_t nb_rate_steps, size_t N_in) :
+              dt(params["dtt"][0]),
+              N(N_in),
+              save_every(params["TR"][0]/params["dtt"][0]),
+              nb_bold_steps(nb_rate_steps*params["dtt"][0]/params["TR"][0]),
+              rate_buffer_size(nb_rate_steps),
+              nvc_sigmoid(params["nvc_sigmoid"][0]),
+              nvc_match_slope(params["nvc_match_slope"][0]),
+              nvc_r0(params["nvc_r0"][0]),
+              nvc_u50(params["nvc_u50"][0]),
+              b(NULL, N_in, nb_rate_steps*params["dtt"][0]/params["TR"][0]),
+              r(NULL, N_in, nb_rate_steps),              
+              s(NULL, N_in),
+              f(NULL, N_in),
+              v(NULL, N_in),
+              q(NULL, N_in),
+              ds(NULL, N_in),
+              df(NULL, N_in),
+              dv(NULL, N_in),
+              dq(NULL, N_in),
+              Z(Eigen::ArrayXd::Ones(4*N_in)),
+              dZ(4*N_in)
+    {}
+
+    /**
+     * Initialise maps and arrays.
+     *
+     * Only two arrays are allocated, Z (value) and dZ (derivative) with the
+     * state of the BW model. For readability, chunks of these arrays are split
+     * and mapped to the standard variables in the BW model (s,f,v,q).
+     *
+     * As the integrator runs, fills a pre-allocated array with BOLD values.
+     *
+     * @param[in] rate_e_res reference to firing rate array
+     * @param[out] bold_res writeable reference to BOLD array
+     */
+    void init(double* rate_e_res, double* bold_res) {
+    //void init(double* rate_e_res, double* bold_res, double* fic_res) {
+
+        double *Z_ptr = &Z(0), *dZ_ptr = &dZ(0);
+        new (&s) Eigen::Map<Eigen::ArrayXd>(Z_ptr, N);
+        new (&f) Eigen::Map<Eigen::ArrayXd>(Z_ptr + 1*N, N);
+        new (&v) Eigen::Map<Eigen::ArrayXd>(Z_ptr + 2*N, N);
+        new (&q) Eigen::Map<Eigen::ArrayXd>(Z_ptr + 3*N, N);
+        new (&ds) Eigen::Map<Eigen::ArrayXd>(dZ_ptr, N);
+        new (&df) Eigen::Map<Eigen::ArrayXd>(dZ_ptr + 1*N, N);
+        new (&dv) Eigen::Map<Eigen::ArrayXd>(dZ_ptr + 2*N, N);
+        new (&dq) Eigen::Map<Eigen::ArrayXd>(dZ_ptr + 3*N, N);
+        
+        s.fill(0);
+
+        new (&b) Eigen::Map<Eigen::MatrixXd>(bold_res, N, nb_bold_steps);
+        new (&r) Eigen::Map<Eigen::ArrayXXd>(rate_e_res, N, rate_buffer_size);        
+
+    }
+
+    /**
+     * Compute BW equations for the value of firing rates at position idx in
+     * the shared array.
+     *
+     * @param idx index of firing rate to use
+     */
+    void compute(size_t idx) {
+        // --- BEGIN: NVC (sigmoidal saturation) ---------------------------------------
+    Eigen::ArrayXd z_arr;  // elementwise drive (array for .exp(), etc.)
+
+    const Eigen::ArrayXd u = r.col(idx % rate_buffer_size).array();
+
+    // Build a baseline array (same size as u)
+    const Eigen::ArrayXd u0 = Eigen::ArrayXd::Constant(u.size(), nvc_r0);
+
+    // Logistic g(u) = umax / (1 + exp(-k * (u - u50)))
+    auto g_of = [&](const Eigen::ArrayXd& x) -> Eigen::ArrayXd {
+        return nvc_umax / (1.0 + (-nvc_k * (x - nvc_u50)).exp());
+    };
+
+    // g'(u) = umax * k * exp(-k(u-u50)) / (1 + exp(-k(u-u50)))^2
+    auto gp_of = [&](const Eigen::ArrayXd& x) -> Eigen::ArrayXd {
+        const Eigen::ArrayXd e   = (-nvc_k * (x - nvc_u50)).exp();
+        const Eigen::ArrayXd den = 1.0 + e;
+        return nvc_umax * nvc_k * e / (den * den);
+    };
+    if (nvc_sigmoid) {
+        // u: the neural drive you were using (current column of rates buffer)
+
+        const Eigen::ArrayXd g_u  = g_of(u);
+        const Eigen::ArrayXd g_u0 = g_of(u0);
+
+        // Slope-match so small deviations around baseline behave like original mapping
+        if (nvc_match_slope) {
+            Eigen::ArrayXd gp0 = gp_of(u0);
+            // Guard against tiny slopes to avoid blow-ups
+            const double eps = 1e-12;
+            gp0 = gp0.max(eps);
+            z_arr = (g_u - g_u0) / gp0;  // elementwise scaling
+        } else {
+            z_arr = (g_u - g_u0);
+        }
     } else {
-        // Need minimal buffer for internal calculations
-        rate_e_res = mxCreateDoubleMatrix(N, 2*batch_size, mxREAL);
-    }
+        // Original behavior’s drive (no saturation). If your original code used r.col(...),
+        // keep it here so the only change below is the replacement of that symbol by 'z'.
+        z_arr = u;
+    }    
+    // --- END: NVC -----------------------------------------------------------------
+
+    ds = ( z_arr - itaus*s - itauf*(f - 1) );
+    df = s;
+    dv = itauo*(f - v.pow(ialpha));      
+    dq = itauo*(f*(1-pow(1-Eo, 1/f))/Eo - (v.pow(ialpha-1))*q);
     
-    if (return_flags & RETURN_RATE_I) {
-        rate_i_res = mxCreateDoubleMatrix(N, nb_steps, mxREAL);
-    } else {
-        // Need minimal buffer for internal calculations
-        rate_i_res = mxCreateDoubleMatrix(N, 2*batch_size, mxREAL);
+    Z += dt*dZ;
+    count++;
+
+    if (count == save_every) {
+        b.col(b_idx)  = vo*( k1*(1-q) + k2*(1-q/v) + k3*(1-v) );
+        count -= save_every;
+        b_idx++;
     }
-    
-    if (return_flags & RETURN_FIC) {
-        fic_res = mxCreateDoubleMatrix(N, nb_steps, mxREAL);
-    } else {
-        // Minimal buffer if needed internally
-        fic_res = mxCreateDoubleMatrix(N, 2*batch_size, mxREAL);
-    }
-    
-    if (return_flags & RETURN_BOLD) {
-        bold_res = mxCreateDoubleMatrix(N, nb_steps_bold, mxREAL);
-    } else {
-        // Don't need BOLD buffer if not returning
-        bold_res = mxCreateDoubleMatrix(N, 1, mxREAL);
     }
 
-    // Run, passing results by reference
-    try {      
-        DYN_FIC_DMFSimulator sim(params, nb_steps, N);
-        sim.run(safeGet(rate_e_res), safeGet(rate_i_res), safeGet(bold_res), safeGet(fic_res));
-      
-    } catch (...) {
-        mexErrMsgIdAndTxt("DMF:unknown", "Unknown failure occurred.");
+    /**
+     * Compute a full batch of BOLD steps for firing rate values in the given
+     * range of the shared array.
+     *
+     * @param range range of firing rate indices to use
+     */
+    void compute_range(Range range) {
+        for (auto i = range.start; i <= range.end; i++) {
+            compute(i);
+        }
     }
 
-    // Copy back results with cleaner bitflag-based output assignment
-    int output_idx = 0;
-    
-    // Return requested outputs in order (E-rates, I-rates, BOLD, FIC)
-    if (return_flags & RETURN_RATE_E) {
-        plhs[output_idx++] = rate_e_res;
+    /**
+     * Spawn a new thread and compute a batch of BOLD steps for firing rate
+     * values in the given range of the shared array.
+     *
+     * @param range range of firing rate indices to use
+     */
+    void compute_async(Range r) {
+        th = std::thread([=] { compute_range(r); });
     }
-    
-    if (return_flags & RETURN_RATE_I) {
-        plhs[output_idx++] = rate_i_res;
+
+    /**
+     * Join the thread in which the integrator is computing asynchronously,
+     * if possible.
+     *
+     * Simple wrapper around std::thread::join.
+     */
+    void join() {
+        if (th.joinable()) { th.join(); }
     }
+
+    /**
+     * Make sure that copy constructors are disabled (to avoid making copies
+     * of this object when passing it to threads).
+     */
+    BOLDIntegrator(const BOLDIntegrator&) = delete;
+    void operator=(const BOLDIntegrator&) = delete;
+
+};
+
+
+/**
+ * Main class of the DMF simulator.
+ *
+ * Integrates the system of ODEs of the Dynamic Mean Field model using a
+ * stochastic Euler-Maruyama method. Includes a parallelised integrator for the
+ * BOLD Balloon-Windkessel model to simulate fMRI time series.
+ *
+ * RH Sep. 2021. Includes Plasticity rule for the local inihibitory feedback
+ *
+ */
+class DYN_FIC_DMFSimulator {
+
+public:
+    double dt;
+    double I0;
+    double w;
+    double JN;
+    Eigen::MatrixXd C;
+    double G;
+    double gamma;
+    double sigma;
+    double taog;
+    double taon;
+    double wgaine;
+    double wgaini;
+    double g_e;
+    double g_i;
+    double Ie;
+    double Ii;
+    double ce;
+    double ci;
+    double dtt;
+    double obj_rate; // fic objective rate
+    double tau_wgain;
+    double sigma_wgain;
+    bool with_dynamic_gain;
+    bool use_gain_ts;
+    const double* gain_ts_ptr;
+    size_t gain_ts_len;
     
-    if (return_flags & RETURN_BOLD) {
-        plhs[output_idx++] = bold_res;
-    }
     
-    if (return_flags & RETURN_FIC) {
-        plhs[output_idx++] = fic_res;
+
+    
+    
+
+    size_t nb_steps, N, batch_size, steps_per_millisec, seed;
+    bool return_rate, return_bold, return_fic, with_decay, with_plasticity;
+
+    Eigen::ArrayXd sn, sg, J, receptors,lrj,taoj, Jexte, Jexti;
+
+    BOLDIntegrator bold_int;
+
+    /**
+     * Constructor.
+     *
+     * @param params Matlab struct with all necessary parameters (see checkArguments)
+     * @param nb_steps_in number of firing rate steps to simulate
+     * @param N_in number of nodes/ROIs in the model
+
+     */
+    DYN_FIC_DMFSimulator(ParamStruct params, size_t nb_steps_in, size_t N_in) :
+            dt(params["dt"][0]),
+            I0(params["I0"][0]),
+            w(params["w"][0]),
+            JN(params["JN"][0]),
+            G(params["G"][0]),
+            gamma(params["gamma"][0]),
+            sigma(params["sigma"][0]),
+            taog(params["taog"][0]),
+            taon(params["taon"][0]),
+            wgaine(params["wgaine"][0]),
+            wgaini(params["wgaini"][0]),
+            g_e(params["g_e"][0]),
+            g_i(params["g_i"][0]),
+            Ie(params["Ie"][0]),
+            Ii(params["Ii"][0]),
+            ce(params["ce"][0]),
+            ci(params["ci"][0]),
+            dtt(params["dtt"][0]),
+            obj_rate(params["obj_rate"][0]),
+            tau_wgain(params["tau_wgain"][0]),
+            sigma_wgain(params["sigma_wgain"][0]),
+            with_dynamic_gain(params["with_dynamic_gain"][0]),
+            use_gain_ts(params["use_gain_ts"][0]),
+            gain_ts_ptr(params["gain_ts"]),
+            gain_ts_len((size_t) params["gain_ts_len"][0]),
+            nb_steps(nb_steps_in),
+            N(N_in),
+            batch_size(params["batch_size"][0]),
+            steps_per_millisec(1.0/params["dt"][0]),
+            return_rate(params["return_rate"][0]),
+            return_bold(params["return_bold"][0]),
+            return_fic(params["return_fic"][0]),
+            with_decay(params["with_decay"][0]),
+            with_plasticity(params["with_plasticity"][0]),
+            sn(N_in),
+            sg(N_in),                        
+            bold_int(params, nb_steps, N_in) {
+
+              C = Eigen::Map<const Eigen::MatrixXd>(params["C"], N, N);
+
+              receptors = ensureArray(params, "receptors", N);
+              lrj = ensureArray(params, "lrj", N);
+              taoj = ensureArray(params, "taoj", N);
+              Jexte     = ensureArray(params, "Jexte", N);
+              Jexti     = ensureArray(params, "Jexti", N);
+              J         = ensureArray(params, "J", N);
+
+              if (params.count("seed")) {
+                seed = params["seed"][0];
+              } else {
+                seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+              }
+
+              Eigen::initParallel();
+
+    };
+
+
+    inline Eigen::ArrayXd curr2rate(const Eigen::ArrayXd& x, double wgain, double g,
+           double I, double c) {
+        Eigen::ArrayXd y = c*(x-I)*(1+receptors*wgain);
+        return y/(1-exp(-g*y));
     }
-}
+
+
+    void run(double* rate_e_res,double* rate_i_res, double* bold_res, double* fic_res) {        
+        // Initialise BOLD integrator if needed
+        if (return_bold) { bold_int.init(rate_e_res, bold_res); }        
+        double bold_timer = 0;
+        size_t last_bold = 0;
+
+        // Build Eigen::Map to return excitatory rates by reference
+        size_t rate_size = return_rate ? nb_steps : (2*batch_size);
+        Eigen::Map<Eigen::ArrayXXd> rn(rate_e_res, N, rate_size);
+
+        // Build Eigen::Map to return inhibitory rates by reference        
+        Eigen::Map<Eigen::ArrayXXd> rg(rate_i_res, N, rate_size);
+
+        // Build Eigen::Map to return fic by reference
+        size_t fic_size = return_fic ? nb_steps : (2*batch_size);
+        Eigen::Map<Eigen::ArrayXXd> fic(fic_res, N, fic_size);
+
+        // Initialise PRNG and arrays, and start simulation
+        std::default_random_engine e(seed);
+        std::normal_distribution<double> n(0, std::sqrt(dt)*sigma);
+        std::normal_distribution<double> n_wg(0, 1);
+        sn.fill(0.001);
+        sg.fill(0.001);
+        Eigen::ArrayXd rnd = Eigen::ArrayXd::Zero(N);
+        Eigen::ArrayXd jt = J; //initializing fic
+        // Dynamic gain state (shared for E and I)
+        double wgt_e = wgaine;
+        double wgt_i = wgaini;
+        size_t micro_step = 0;
+
+        for (size_t t = 0; t < nb_steps; t++) {
+
+            size_t rate_idx = t % rate_size;
+            size_t fic_idx = t % fic_size;
+            for (size_t dummy = 0; dummy < steps_per_millisec; dummy++) {
+                Eigen::ArrayXd xn = with_plasticity ? I0*Jexte + w*JN*sn + G*JN*(C*sn.matrix()).array() - jt*sg : I0*Jexte + w*JN*sn + G*JN*(C*sn.matrix()).array() - J*sg;;
+                Eigen::ArrayXd xg = I0*Jexti + JN*sn - sg;
+
+                if (use_gain_ts) {
+                    size_t k = micro_step < gain_ts_len ? micro_step : (gain_ts_len - 1);
+                    wgt_e = gain_ts_ptr[k];
+                    wgt_i = gain_ts_ptr[k];
+                } else if (with_dynamic_gain) {
+                    double rnd_wg = n_wg(e);
+                    wgt_e += dt * (-wgt_e / tau_wgain) + std::sqrt(dt) * sigma_wgain * rnd_wg;
+                    wgt_i += dt * (-wgt_i / tau_wgain) + std::sqrt(dt) * sigma_wgain * rnd_wg;
+                    wgt_e = clip(wgt_e);
+                    wgt_i = clip(wgt_i);
+                }
+                micro_step++;
+                rn.col(rate_idx) = curr2rate(xn, wgt_e, g_e, Ie, ce);
+                rg.col(rate_idx) = curr2rate(xg, wgt_i, g_i, Ii, ci);
+
+                rnd = rnd.unaryExpr([&n, &e](double dummy){return n(e);});
+                sn += dt*(-sn/taon+(1-sn)*gamma*rn.col(rate_idx)/1000) + rnd; 
+                sn = sn.unaryExpr(&clip);
+
+                rnd = rnd.unaryExpr([&n, &e](double dummy){return n(e);});
+                sg += dt*(-sg/taog+rg.col(rate_idx)/1000) + rnd;
+                sg = sg.unaryExpr(&clip);
+                if (with_decay) {
+                    jt += dt*(-jt/taoj + lrj*(rg.col(rate_idx)*(rn.col(rate_idx)-obj_rate))/1000000); // plasticity and decay               
+                } else if (with_plasticity) {
+                    jt += dt*(lrj*(rg.col(rate_idx)*(rn.col(rate_idx)-obj_rate))/1000000); // plasticity
+                };                
+                
+                fic.col(fic_idx) = jt; // saving
+            }
+
+            auto start = std::chrono::steady_clock::now();
+            if (return_bold && ( ((t+1) % batch_size) == 0)) {
+                bold_int.join();
+
+                bold_int.compute_async(Range(rate_idx - batch_size + 1, rate_idx));
+
+                last_bold = (rate_idx + 1) % batch_size;
+
+                #ifdef NO_PARALLEL
+                bold_int.join();
+                #endif
+            }
+            auto end = std::chrono::steady_clock::now();
+            auto diff = end - start;
+            bold_timer += std::chrono::duration <double, std::milli> (diff).count();
+
+        }
+        
+        if (return_bold) {
+            bold_int.join();
+
+            if  ((nb_steps%batch_size) > last_bold) {
+                // Compute the remainder of BOLD samples
+                // TODO: this will compute things even if they do not end up leading to
+                // a new actual BOLD sample. Fix to avoid unnecessary computation.
+                bold_int.compute_range(Range(last_bold, nb_steps%batch_size));
+            }
+
+          // std::cout << "Bold time: " << bold_timer << std::endl;
+        }
+
+    }
+
+};
+
+#endif
 

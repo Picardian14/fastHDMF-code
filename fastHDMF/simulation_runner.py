@@ -15,7 +15,7 @@ import hashlib
 
 # Import modules
 from fastHDMF.experiment_manager import ExperimentManager
-from fastHDMF.helper_functions import filter_bold
+from fastHDMF.helper_functions import filter_bold, filter_bold_bandpass_butterworth
 from fastHDMF.observables import ObservablesPipeline
 
 # Import HDMF (assuming it's available in the environment)
@@ -49,7 +49,7 @@ class HDMFSimulationRunner:
         """Return list of all subject IDs"""
         return list(self.exp.sc_matrices.keys()) 
 
-    def _generate_unique_seed(self, task: dict, ipp: str, item_idx: int) -> int:
+    def _generate_unique_seed(self, task: dict, item_idx: int) -> int:
         """
         Generate a unique seed for each simulation based on:
         - Patient ID (ipp)
@@ -58,6 +58,7 @@ class HDMFSimulationRunner:
         - Optional base seed from config
         """
         # Pull seed config from simulation config if available
+        ipp = task.get('ipp', 'unknown_ipp')
         sim_cfg = getattr(self.exp, 'current_config', {}).get('simulation', {}) if getattr(self, 'exp', None) else {}
         # Support both new and legacy ways of configuring the strategy
         seed_strategy = sim_cfg.get('seed_strategy', task.get('seed_strategy', 'unique_per_simulation'))
@@ -68,7 +69,7 @@ class HDMFSimulationRunner:
             'per_task': 'unique_per_task',
             'subject_seed': 'per_subject',
             'per_subject': 'per_subject',
-            'same_for_all': 'same_for_all',
+            'same_for_all': 'same_for_all', # This strategy will only have the seed parameter as determinent for the simulation seed
         }
         seed_strategy = aliases.get(seed_strategy, seed_strategy)
 
@@ -226,53 +227,89 @@ class HDMFSimulationRunner:
         params["with_plasticity"] = task['with_plasticity']
 
         if params["with_plasticity"]:
-            if 'lrj' in task:
-                LR = task['lrj']
-            else:
-                LR = 1.0  # Default learning rate for plasticity
-                self.exp.logger.info(f"No learning rate 'lrj' specified in task; using default LR={LR}")
+        
+            LR = task.get('lrj', 1.0)
+            params['lrj'] = LR
+
+            if 'lr_vector' in task:
+                LR_vector = np.array(task['lr_vector'])
+                LR = LR_vector # if set heterogeneously, DECAY can be calculated per region or set as a vector as well
+                assert len(LR_vector) == params['N'], f"LR vector length {len(LR_vector)} does not match number of regions {params['N']}"
+                params['lrj'] = LR_vector # Option to set lrj heterogeneously
+        
             if 'taoj' not in task:
                 # Load homeostatic parameters
-                fit_res_path = self.exp.data_dir / "LinearCoeffs" / f"{self.exp.current_config['data']['sc_root']}_fit_res_{str(params['obj_rate']).replace('.', '-')}.npy"
+                
+                #fit_res_filename = f"{task.get('ipp', 'unknown_ipp')}_{str(params['obj_rate']).replace('.', '-')}.npy"
+                fit_res_filename = "healthy_average_3-44.npy"
+                fit_res_path = self.exp.data_dir / "LinearCoeffs" / f"{self.exp.current_config['data']['sc_root']}" / fit_res_filename
                 if fit_res_path.is_file() is False:
-                    self.exp.logger.error(f"Homeostatic fit results not found at: {fit_res_path}. Using inputted or default taoj value.")
-                    DECAY = task.get('taoj', 1000)
-                    self.exp.logger.info(f"Setting homeostatic DECAY={DECAY:.5f} for LR={LR:.5f}")
-                    params['taoj'] = DECAY
+                    self.exp.logger.error(f"Homeostatic fit results not found at: {fit_res_path}. If you don't use homeostatic coefficient, input taoj directly in the config file to skip this step.")
+                    raise FileNotFoundError(f"Homeostatic fit results not found at: {fit_res_path}. If you don't use homeostatic coefficient, input taoj directly in the config file to skip this step.")                    
                 else:   
                     self.exp.logger.info(f"Loading homeostatic fit results from: {fit_res_path}")
                     fit_res = np.load(str(fit_res_path))
                     b = fit_res[0]
                     a = fit_res[1]
-                    DECAY = np.exp(a + np.log(LR) * b) if task['with_decay'] else 0
-                    self.exp.logger.info(f"Setting homeostatic DECAY={DECAY:.5f} for LR={LR:.5f}")
+                    DECAY = np.exp(a + np.log(LR) * b) if task['with_decay'] else 0                        
                     params['taoj'] = DECAY
+                
             else:
-                DECAY = task['taoj']
+                DECAY = task.get('taoj')
+                params['taoj'] = DECAY
 
-            # Makes decay and lr heterogenizable, as J is.
-            if 'lr_vector' in task:
-                LR_vector = np.array(task['lr_vector'])
-                assert len(LR_vector) == params['N'], f"LR vector length {len(LR_vector)} does not match number of regions {params['N']}"
-                params['lr_vector'] = LR_vector
-            else:
-                params['lr_vector'] = np.ones(params['N']) * LR
-            if 'taoj' not in task:
-                TAOJ_vector = np.exp(a + np.log(params['lr_vector']) * b) 
-                params['taoj_vector'] = TAOJ_vector
-            else:
-                params['taoj_vector'] = np.ones(params['N']) * DECAY
+            # Deviant lrj assumes a homeostatic decay and moves the lrj in the direction of a precalculated
+            # that changes the target rate to at most d_max away from the original obj_rate
+            if self.exp.current_config.get('simulation').get('deviant_lrj',False):                                                                            
+                try:
+                    d_max = fit_res[2]                        
+                except IndexError:
+                    self.exp.logger.error(f"Either no 3rd axis with deviance was calculated, or homeostatic decay was not calculated before.")
+                    raise IndexError(f"Either no 3rd axis with deviance was calculated, or homeostatic decay was not calculated before.")
+                deviance_path = self.exp.data_dir / "DevianceCoeffs" / f"{Path(self.exp.current_config['data']['sc_root'])}" / f"{task.get('ipp', 'unknown_ipp')}.csv"
+                if deviance_path.is_file() is True:
+                    alpha = np.loadtxt(deviance_path, delimiter=',')                         
+                else:
+                    self.exp.logger.error(f"Deviant homeostatic fit deviance results not found at: {deviance_path}. ")
+                LR_deviant = LR * np.exp(1-alpha * d_max) # Move lrj in the direction that would reduce the deviance by at most d_max
+                params['lrj'] = LR_deviant
 
-            
-        # Global coupling
-        params['G'] = task['G']
+            self.exp.logger.info(f"Setting homeostatic DECAY={DECAY} for LR={LR}")
+        
+        # Global coupling - handle use_g_crit
+        if self.exp.current_config.get('simulation').get('use_g_crit', False):
+            Gcrit_path = self.exp.data_dir / "GCrits" / f"{Path(self.exp.current_config['data']['sc_root'])}" / f"{task.get('ipp', 'unknown_ipp')}.csv"
+            if Gcrit_path.is_file():
+                Gcrit = float(np.loadtxt(Gcrit_path, delimiter=','))
+                
+                # Check if G is in task (from grid) - if so, treat it as offset from G_crit
+                if 'G' in task:
+                    G_offset = task['G']
+                    params['G'] = Gcrit + G_offset
+                    self.exp.logger.info(f"Using G_crit={Gcrit:.3f} with offset={G_offset:.3f}, final G={params['G']:.3f}")
+                else:
+                    # No grid G parameter - just use G_crit directly
+                    params['G'] = Gcrit
+                    self.exp.logger.info(f"Using critical G from file: {Gcrit_path} with value {Gcrit}")
+            else:
+                # Fallback to task G if G_crit file not found
+                if 'G' not in task:
+                    raise ValueError(f"use_g_crit is True but G_crit file not found at {Gcrit_path} and no G in task")
+                params['G'] = task['G']
+                self.exp.logger.warning(f"G_crit file not found, using G={task['G']} from task")
+        else:
+            # Normal case: use G from task (or default)
+            params['G'] = task.get('G')
+        
+
         if 'alpha' in task:
             params['alpha'] = task['alpha']
             params['J'] = params['alpha'] * params['G'] * params['C'].sum(axis=0).squeeze() + 1
         else:
             params['alpha'] = 0.75
             params['J'] = params['alpha'] * params['G'] * params['C'].sum(axis=0).squeeze() + 1
-
+        if 'J' in task:
+            params['J'] = task['J']
         params['TR'] = task['TR']
         params['flp'] = task.get('flp', 0.008)
         params['fhp'] = task.get('fhp', 0.09)
@@ -302,9 +339,9 @@ class HDMFSimulationRunner:
             G_value = f"{params['G']:.2f}".replace('.', '')
             if 'wgaine' in task:
                 w_value = f"{params['wgaine']:.2f}".replace('.', '')
-                fname = project_root / "data" / "dyn_fics"  / f"mean_fic_w_{w_value}.npy"
+                fname = self.exp.project_root / "data" / "dyn_fics"  / f"mean_fic_w_{w_value}.npy"
             else:
-                fname = project_root / "data" / "dyn_fics"  / f"mean_fic_G_{G_value}.npy"            
+                fname = self.exp.project_root / "data" / "dyn_fics"  / f"mean_fic_G_{G_value}.npy"            
             J = np.load(fname)
             params['J'] = J
 
@@ -444,11 +481,12 @@ class HDMFSimulationRunner:
                 # If there is a param to iterate over, set it here
                 thread_task = current_task.copy()  # capture current task from outer loop
                 thread_task['sc_matrix'] = item_value['sc_matrix']
+                thread_task['ipp'] = ipp  # Add patient ID to task for observables that might need it
                 if item_value.get('param_key') is not None:
                     thread_task[item_value['param_key']] = item_value['param_value']
                 # If there a seed defined make sure it is always different for each simulation
             
-                unique_seed = self._generate_unique_seed(thread_task, ipp, i)
+                unique_seed = self._generate_unique_seed(thread_task, i)
                 #self.exp.logger.info(f"Generated unique seed {unique_seed} for ipp {ipp}, item {i}, task {thread_task}")
                 thread_task['seed'] = unique_seed
                 # Run simulation
@@ -473,7 +511,7 @@ class HDMFSimulationRunner:
             else:
                 pairs = [_run_one(current_task, i, ipp, item) for i, (ipp, item) in enumerate(self.items)]
             
-            # write results directly into grids, with optional averaging
+            # write results directly into grids, with optional averaging / Caution: if averaged, make sure that items are ordered by subject so that you can accumulate into the correct slot (e.g. if 10 subjects and 5 G values, make sure that the first 10 items are all for G1, the next 10 for G2, etc)
             if sim.get('averaged', False):
                 # number of unique ipps (subjects) per averaged‐slot
                 n_subjects = len(self.all_ipps)
@@ -502,6 +540,28 @@ class HDMFSimulationRunner:
 
         # --- Package + save once ---
         axis_values_dict = {name: np.array(vals) for name, vals in zip(axis_names, axis_values)}
+
+
+        # Reshape items axis if 'over' was used, separating subjects and over-parameter
+        sim_cfg = config.get("simulation", {})
+        over_config = sim_cfg.get('over')
+        if over_config is not None and not sim_cfg.get('averaged', False):
+            n_subjects = len(self.all_ipps) if config['data']['test_mode'] is False else min(config['data'].get('max_subjects_test', 2), len(self.all_ipps))
+            over_param_name = list(over_config.keys())[0]
+            over_values = self._generate_parameter_values(over_config[over_param_name])
+            n_over = len(over_values)
+
+            # Reshape each observable grid from (tasks, n_subjects*n_over) -> (tasks, n_subjects, n_over)
+            reshaped_grids = {}
+            for obs_key, grid in observable_grids.items():
+                # Items ordering: outer=subjects, inner=over_values
+                reshaped = grid.reshape(local_task_count, n_subjects, n_over)
+                reshaped_grids[obs_key] = reshaped
+            observable_grids = reshaped_grids
+
+            # Add over-parameter as an additional axis
+            axis_values_dict[over_param_name] = over_values
+            
         meta = {
             "job_id": getattr(em, "job_id", None),
             "job_count": getattr(em, "job_count", None),
