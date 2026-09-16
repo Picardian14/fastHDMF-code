@@ -36,10 +36,12 @@ Build the image from the repository root:
 docker build -t fastdyn-fic-dmf .
 ```
 
-Run the built-in two-node simulation to verify the image:
+Run the built-in two-node simulation explicitly if you want to verify the
+installed extension:
 
 ```bash
-docker run --rm fastdyn-fic-dmf
+docker run --rm fastdyn-fic-dmf \
+  python3 /opt/fastdyn_fic_dmf/smoke_test.py
 ```
 
 To run your own script, mount its directory at `/work`. Because the image's
@@ -49,18 +51,54 @@ entrypoint is Python, pass the script path and its arguments directly:
 docker run --rm \
   --user "$(id -u):$(id -g)" \
   -v "$PWD:/work" \
-  fastdyn-fic-dmf simulation.py
+  fastdyn-fic-dmf python3 simulation.py
 ```
 
 The optional `--user` makes files created in `/work` belong to the current
 host user. To open an interactive Python prompt instead, run:
 
 ```bash
-docker run --rm -it fastdyn-fic-dmf -i
+docker run --rm -it fastdyn-fic-dmf python3 -i
 ```
 
-This image intentionally installs only the `fastdyn_fic_dmf` simulator. The
-`fastHDMF` experiment and SLURM management package is not included.
+### Jupyter notebooks
+
+Jupyter Notebook and JupyterLab are installed in the image. The default
+container command starts the token-protected Jupyter Notebook server, with the
+repository mounted as its working directory.
+
+The simplest way to build and start it is:
+
+```bash
+docker compose up --build
+```
+
+You can do the same without Compose:
+
+```bash
+docker build -t fastdyn-fic-dmf .
+docker run --rm -it \
+  --user "$(id -u):$(id -g)" \
+  -p 127.0.0.1:8888:8888 \
+  -v "$PWD:/work" \
+  fastdyn-fic-dmf
+```
+
+The server prints a URL containing an authentication token, such as
+`http://127.0.0.1:8888/tree?token=...`. Open that URL in a browser.
+
+To use the server from VS Code:
+
+1. Install the Microsoft Python and Jupyter extensions.
+2. Open an `.ipynb` file and select the kernel picker in the upper-right.
+3. Select **Existing Jupyter Server** and paste the complete URL printed by
+   the container, including `?token=...`.
+
+Code cells then execute inside the container, where `fastdyn_fic_dmf` is
+already installed. Notebooks and generated files remain in the repository on
+the host because it is mounted at `/work`.
+
+The `fastHDMF` experiment and SLURM management package is not included.
 
 ---
 

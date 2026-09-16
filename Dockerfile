@@ -52,15 +52,22 @@ RUN python3 -m pip install --no-cache-dir --no-index \
         fastdyn_fic_dmf==0.1.0 \
     && rm -rf /wheels
 
+# Include the Jupyter Notebook server and JupyterLab UI in the same image while
+# keeping the simulator's Python and NumPy versions fixed.
+RUN python3 -m pip install --no-cache-dir \
+        jupyterlab==4.6.3 \
+        notebook==7.6.2
+
 COPY docker/smoke_test.py /opt/fastdyn_fic_dmf/smoke_test.py
 
 # Fail the image build if the compiled extension cannot run a simulation.
 RUN python3 /opt/fastdyn_fic_dmf/smoke_test.py
 
-ENV PYTHONUNBUFFERED=1
+ENV HOME=/tmp \
+    PYTHONUNBUFFERED=1
 WORKDIR /work
+EXPOSE 8888
 
-# A mounted simulation can be passed directly:
-# docker run --rm -v "$PWD:/work" fastdyn-fic-dmf simulation.py
-ENTRYPOINT ["python3"]
-CMD ["/opt/fastdyn_fic_dmf/smoke_test.py"]
+# Starting the container starts a token-protected notebook server. A different
+# command, such as `python3 simulation.py`, can still be supplied to docker run.
+CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--ServerApp.root_dir=/work"]

@@ -1,0 +1,10 @@
+services:
+  notebook:
+    build:
+      context: .
+    image: fastdyn-fic-dmf:latest
+    init: true
+    ports:
+      - "127.0.0.1:8888:8888"
+    volumes:
+      - .:/work
