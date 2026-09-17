@@ -90,6 +90,7 @@ RUN python3 /opt/fastdyn_fic_dmf/smoke_test.py
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/work:/opt/fastHDMF
 WORKDIR /work
+EXPOSE 8888
 
 EXPOSE 8888
 
