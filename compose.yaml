@@ -1,0 +1,20 @@
+services:
+  notebook:
+    build:
+      context: .
+    image: fastdyn-fic-dmf:latest
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8888:8888"
+    volumes:
+      - .:/work
+    command:
+    - jupyter
+    - lab
+    - --ip=0.0.0.0
+    - --port=8888
+    - --no-browser
+    - --allow-root
+    - --ServerApp.root_dir=/work
+    - --IdentityProvider.token=fasthdmf-local

@@ -24,43 +24,63 @@ This repository provides:
 
 ---
 
-## Docker installation (core simulator)
+## Docker notebook environment
 
 The Docker image contains a matched Python 3.10, NumPy, Boost.Python, and
-Boost.NumPy environment. The host only needs Docker; it does not need Python,
-NumPy, Boost, or a compiler.
+Boost.NumPy environment, the compiled simulator, the `fastHDMF` package,
+JupyterLab, and the dependencies used by the repository notebooks. The host
+only needs Docker.
 
-Build the image from the repository root:
+Start the notebook server in the background from the repository root:
 
 ```bash
-docker build -t fastdyn-fic-dmf .
+docker compose up --build -d
 ```
 
-Run the built-in two-node simulation to verify the image:
+The repository is mounted at `/work`, so notebook changes and generated files
+are retained on the host. Open <http://127.0.0.1:8888/lab> in a browser. To
+watch startup logs or stop the server, use:
 
 ```bash
-docker run --rm fastdyn-fic-dmf
+docker compose logs -f notebook
+docker compose down
 ```
 
-To run your own script, mount its directory at `/work`. Because the image's
-entrypoint is Python, pass the script path and its arguments directly:
+The port is bound only to the host's loopback interface. Jupyter authentication
+is therefore disabled for convenient local development; do not change the
+port mapping to `0.0.0.0:8888:8888` on an untrusted network.
+
+### Connect from VS Code
+
+1. Install the Microsoft **Python** and **Jupyter** VS Code extensions.
+2. Start the container with `docker compose up --build -d`.
+3. Open an `.ipynb` file, choose **Select Kernel**, then **Existing Jupyter
+   Server**, and enter `http://127.0.0.1:8888`.
+4. Select the Python 3 kernel offered by that server.
+
+You can also use VS Code's **Dev Containers: Attach to Running Container...**
+command and select the Compose `notebook` container.
+
+### Docker without Compose
+
+The equivalent direct Docker commands are:
 
 ```bash
-docker run --rm \
-  --user "$(id -u):$(id -g)" \
+docker build -t fasthdmf-notebook .
+docker run --name fasthdmf-notebook -d \
+  --restart unless-stopped \
+  -p 127.0.0.1:8888:8888 \
   -v "$PWD:/work" \
-  fastdyn-fic-dmf simulation.py
+  fasthdmf-notebook
 ```
 
-The optional `--user` makes files created in `/work` belong to the current
-host user. To open an interactive Python prompt instead, run:
+To run the built-in simulator smoke test or open a shell in the running
+container:
 
 ```bash
-docker run --rm -it fastdyn-fic-dmf -i
+docker compose exec notebook python3 /opt/fastdyn_fic_dmf/smoke_test.py
+docker compose exec notebook bash
 ```
-
-This image intentionally installs only the `fastdyn_fic_dmf` simulator. The
-`fastHDMF` experiment and SLURM management package is not included.
 
 ---
 
