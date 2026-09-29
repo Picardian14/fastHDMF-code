@@ -55,7 +55,7 @@ port mapping to `0.0.0.0:8888:8888` on an untrusted network.
 1. Install the Microsoft **Python** and **Jupyter** VS Code extensions.
 2. Start the container with `docker compose up --build -d`.
 3. Open an `.ipynb` file, choose **Select Kernel**, then **Existing Jupyter
-   Server**, and enter `http://127.0.0.1:8888`.
+   Server**, and enter `http://127.0.0.1:8888/?token=fasthdmf-local`.
 4. Select the Python 3 kernel offered by that server.
 
 You can also use VS Code's **Dev Containers: Attach to Running Container...**
@@ -121,12 +121,21 @@ rates, rates_inh, bold, fic = dmf.run(params, nb_steps=50000)
 ```
 
 **Key parameters:**
+- `sn0`: Initial excitatory (NMDA) synaptic gating, scalar or length-`N` vector (default `0.01`)
+- `sg0`: Initial inhibitory (GABA) synaptic gating, scalar or length-`N` vector (default `0.01`)
 - `with_decay`: Enable/disable homeostatic decay mechanism
 - `with_plasticity`: Enable/disable synaptic plasticity
 - `lrj`: Learning rate (scalar or per-region vector)
 - `taoj`: Decay time constant (scalar or per-region vector)
 
 See [examples.ipynb](notebooks/examples.ipynb) for detailed usage examples.
+
+For example, use `dmf.default_params(C=C, sn0=0.05, sg0=np.full(N, 0.02))`
+or assign `params['sn0']` and `params['sg0']` before calling `dmf.run()`.
+Gating values must be finite and in `[0, 1]`; they set only the initial state
+and then evolve according to the model equations. This branch defaults to
+`0.01`; the previous C++ initialization was `0.001`. Set both parameters to
+`0.001` to reproduce that initial state.
 
 ### Running Experiments with Configuration Files
 

@@ -4,6 +4,7 @@ ext = Extension('_DYN_FIC_DMF',
                 libraries = ['boost_python312', 'boost_numpy312'],
                 sources   = ['fastdyn_fic_dmf/DYN_FIC_DMF.cpp'],
                 include_dirs = ['/opt/homebrew/Cellar/boost/1.83.0/include','/opt/homebrew/Cellar/boost-python3/1.83.0_1/include',
+                                '/opt/homebrew/include/eigen3',
                                 ],  # Replace 1.xx.x_1 with your Boost version
                 library_dirs = ['/opt/homebrew/Cellar/boost/1.83.0/lib','/opt/homebrew/Cellar/boost-python3/1.83.0_1/lib'],
                 runtime_library_dirs=['/opt/homebrew/Cellar/boost/1.83.0/lib','/opt/homebrew/Cellar/boost-python3/1.83.0_1/lib'],
@@ -22,4 +23,3 @@ setup(name              = 'fastdyn_fic_dmf',
       install_requires = ['numpy'],
       ext_modules      = [ext],
       packages         = ['fastdyn_fic_dmf'])
-

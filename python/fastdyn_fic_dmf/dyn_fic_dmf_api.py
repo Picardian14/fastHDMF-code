@@ -70,6 +70,8 @@ def default_params(**kwargs):
     params['taog']      = 10       # GABA tau ms
     params['gamma']     = 0.641    # Kinetic Parameter of Excitation
     params['sigma']     = 0.01     # Noise SD nA
+    params['sn0']       = 0.01     # Initial excitatory (NMDA) gating, scalar or per region
+    params['sg0']       = 0.01     # Initial inhibitory (GABA) gating, scalar or per region
     params['JN']        = 0.15     # excitatory synaptic coupling nA
     params['I0']        = 0.382    # effective external input nA
     params['Jexte']     = 1.       # external->E coupling
@@ -144,6 +146,8 @@ def run(params, nb_steps):
     ----------
     params : dict
         Parameter dictionary (see default_params()).
+        sn0 and sg0 set initial excitatory and inhibitory gating in [0, 1].
+        Each accepts a scalar or a length-N vector; omitted values use 0.01.
 
     nb_steps : int
         Number of integration steps to compute. Final size of the simulated
@@ -160,8 +164,17 @@ def run(params, nb_steps):
         params['gain_ts'] = gain_ts
         params['gain_ts_len'] = int(gain_ts.size)
 
-    # Pre-allocate memory for results
     N = params['C'].shape[0]
+    params = params.copy()
+    for name in ('sn0', 'sg0'):
+        initial = np.asarray(params.get(name, 0.01), dtype=float)
+        if initial.ndim > 1 or initial.size not in (1, N):
+            raise ValueError(f"{name} must be a scalar or a length-{N} vector")
+        if not np.all(np.isfinite(initial) & (initial >= 0) & (initial <= 1)):
+            raise ValueError(f"{name} must contain finite values in [0, 1]")
+        params[name] = np.ascontiguousarray(initial)
+
+    # Pre-allocate memory for results
     nb_steps_bold = round(nb_steps*params['dtt']/params['TR'])
     if params["return_rate"]:
         nb_steps_rate = nb_steps

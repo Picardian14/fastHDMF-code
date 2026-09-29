@@ -356,7 +356,7 @@ public:
     size_t nb_steps, N, batch_size, steps_per_millisec, seed;
     bool return_rate, return_bold, return_fic, with_decay, with_plasticity;
 
-    Eigen::ArrayXd sn, sg, J, receptors,lrj,taoj, Jexte, Jexti;
+    Eigen::ArrayXd sn, sg, sn0, sg0, J, receptors,lrj,taoj, Jexte, Jexti;
 
     BOLDIntegrator bold_int;
 
@@ -409,6 +409,8 @@ public:
               Jexte     = ensureArray(params, "Jexte", N);
               Jexti     = ensureArray(params, "Jexti", N);
               J         = ensureArray(params, "J", N);
+              sn0 = params.count("sn0") ? ensureArray(params, "sn0", N) : Eigen::ArrayXd::Constant(N, 0.01);
+              sg0 = params.count("sg0") ? ensureArray(params, "sg0", N) : Eigen::ArrayXd::Constant(N, 0.01);
 
               if (params.count("seed")) {
                 seed = params["seed"][0];
@@ -448,8 +450,8 @@ public:
         // Initialise PRNG and arrays, and start simulation
         std::default_random_engine e(seed);
         std::normal_distribution<double> n(0, std::sqrt(dt)*sigma);
-        sn.fill(0.001);
-        sg.fill(0.001);
+        sn = sn0;
+        sg = sg0;
         Eigen::ArrayXd rnd = Eigen::ArrayXd::Zero(N);
         Eigen::ArrayXd jt = J; //initializing fic
         
@@ -516,4 +518,3 @@ public:
 };
 
 #endif
-
