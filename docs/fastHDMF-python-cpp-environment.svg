@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">How fastHDMF combines Python and C++</title>
+  <desc id="desc">A diagram showing a Docker environment containing a Python workflow, a Boost Python and NumPy bridge, and the C++ simulation engine. Python passes parameters and NumPy arrays to C++, which fills output buffers and returns rates, BOLD, and FIC results.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#EEF2FF"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0F172A" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#EA580C"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+
+  <text x="800" y="58" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700" fill="#0F172A">How fastHDMF combines Python + C++</text>
+  <text x="800" y="91" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="17" fill="#475569">Python organizes the experiment; compiled C++ performs the heavy numerical simulation.</text>
+
+  <!-- Host entry point -->
+  <g filter="url(#shadow)">
+    <rect x="55" y="145" width="215" height="118" rx="18" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
+  </g>
+  <circle cx="92" cy="180" r="16" fill="#E2E8F0"/>
+  <path d="M84 177h16M84 183h16M89 171v18" stroke="#475569" stroke-width="2" stroke-linecap="round" opacity="0.65"/>
+  <text x="120" y="185" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#0F172A">Host machine</text>
+  <text x="82" y="218" font-family="Inter, Arial, sans-serif" font-size="15" fill="#475569">Browser / VS Code</text>
+  <text x="82" y="243" font-family="Inter, Arial, sans-serif" font-size="15" fill="#475569">Only Docker is required</text>
+
+  <!-- Docker environment -->
+  <rect x="310" y="120" width="1235" height="720" rx="28" fill="#FFFFFF" fill-opacity="0.74" stroke="#64748B" stroke-width="2.5" stroke-dasharray="10 8"/>
+  <rect x="345" y="143" width="660" height="43" rx="21" fill="#0F172A"/>
+  <text x="675" y="171" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="600" fill="#FFFFFF">Docker container · Ubuntu 22.04 · Python 3.10 · NumPy 1.23.5</text>
+
+  <path d="M270 204 C290 204, 293 204, 320 204" fill="none" stroke="#64748B" stroke-width="3" marker-end="url(#arrow-blue)"/>
+  <text x="289" y="193" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="600" fill="#475569">connect</text>
+
+  <!-- Python card -->
+  <g filter="url(#shadow)">
+    <rect x="355" y="218" width="390" height="425" rx="22" fill="#EFF6FF" stroke="#60A5FA" stroke-width="2.5"/>
+  </g>
+  <rect x="378" y="240" width="103" height="30" rx="15" fill="#2563EB"/>
+  <text x="429.5" y="261" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">PYTHON</text>
+  <text x="378" y="308" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="700" fill="#1E3A8A">Workflow &amp; orchestration</text>
+
+  <rect x="378" y="335" width="344" height="70" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/>
+  <text x="397" y="363" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" fill="#172554">Jupyter notebooks / CLI</text>
+  <text x="397" y="388" font-family="Inter, Arial, sans-serif" font-size="14" fill="#475569">interactive runs, plots, paper analyses</text>
+
+  <rect x="378" y="417" width="344" height="93" rx="13" fill="#FFFFFF" stroke="#BFDBFE"/>
+  <text x="397" y="445" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" fill="#172554">fastHDMF package</text>
+  <text x="397" y="470" font-family="Inter, Arial, sans-serif" font-size="14" fill="#475569">YAML configs → parameter grids</text>
+  <text x="397" y="493" font-family="Inter, Arial, sans-serif" font-size="14" fill="#475569">joblib / SLURM → parallel runs</text>
+
+  <rect x="378" y="522" width="344" height="92" rx="13" fill="#DBEAFE" stroke="#93C5FD"/>
+  <text x="397" y="551" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" font-weight="700" fill="#1E3A8A">dmf.default_params(...)</text>
+  <text x="397" y="580" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" font-weight="700" fill="#1E3A8A">dmf.run(params, nb_steps)</text>
+  <text x="397" y="601" font-family="Inter, Arial, sans-serif" font-size="13" fill="#475569">public Python API</text>
+
+  <!-- Bridge card -->
+  <g filter="url(#shadow)">
+    <rect x="815" y="270" width="300" height="325" rx="22" fill="#F5F3FF" stroke="#A78BFA" stroke-width="2.5"/>
+  </g>
+  <rect x="838" y="292" width="91" height="30" rx="15" fill="#7C3AED"/>
+  <text x="883.5" y="313" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">BRIDGE</text>
+  <text x="838" y="358" font-family="Inter, Arial, sans-serif" font-size="23" font-weight="700" fill="#4C1D95">Python ↔ C++</text>
+  <text x="838" y="391" font-family="Inter, Arial, sans-serif" font-size="15" fill="#475569">fastdyn_fic_dmf API</text>
+
+  <circle cx="848" cy="427" r="5" fill="#8B5CF6"/>
+  <text x="864" y="432" font-family="Inter, Arial, sans-serif" font-size="14" fill="#334155">formats parameters as NumPy</text>
+  <circle cx="848" cy="463" r="5" fill="#8B5CF6"/>
+  <text x="864" y="468" font-family="Inter, Arial, sans-serif" font-size="14" fill="#334155">preallocates output buffers</text>
+  <circle cx="848" cy="499" r="5" fill="#8B5CF6"/>
+  <text x="864" y="504" font-family="Inter, Arial, sans-serif" font-size="14" fill="#334155">loads _DYN_FIC_DMF</text>
+
+  <rect x="838" y="531" width="254" height="42" rx="10" fill="#EDE9FE"/>
+  <text x="965" y="558" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="650" fill="#5B21B6">Boost.Python + Boost.NumPy</text>
+
+  <!-- C++ card -->
+  <g filter="url(#shadow)">
+    <rect x="1185" y="218" width="315" height="425" rx="22" fill="#FFF7ED" stroke="#FB923C" stroke-width="2.5"/>
+  </g>
+  <rect x="1208" y="240" width="70" height="30" rx="15" fill="#EA580C"/>
+  <text x="1243" y="261" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">C++</text>
+  <text x="1208" y="308" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="700" fill="#7C2D12">Simulation engine</text>
+
+  <rect x="1208" y="335" width="269" height="78" rx="13" fill="#FFFFFF" stroke="#FED7AA"/>
+  <text x="1227" y="365" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" fill="#7C2D12">DYN_FIC_DMF simulator</text>
+  <text x="1227" y="390" font-family="Inter, Arial, sans-serif" font-size="14" fill="#475569">time-step numerical integration</text>
+
+  <circle cx="1218" cy="450" r="5" fill="#F97316"/>
+  <text x="1234" y="455" font-family="Inter, Arial, sans-serif" font-size="14" fill="#334155">neural rates</text>
+  <circle cx="1218" cy="483" r="5" fill="#F97316"/>
+  <text x="1234" y="488" font-family="Inter, Arial, sans-serif" font-size="14" fill="#334155">homeostatic plasticity / FIC</text>
+  <circle cx="1218" cy="516" r="5" fill="#F97316"/>
+  <text x="1234" y="521" font-family="Inter, Arial, sans-serif" font-size="14" fill="#334155">BOLD signal integration</text>
+
+  <rect x="1208" y="551" width="269" height="63" rx="13" fill="#FFEDD5"/>
+  <text x="1342.5" y="577" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="650" fill="#9A3412">C++14 · Eigen · -O3 · pthread</text>
+  <text x="1342.5" y="599" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" fill="#475569">compiled native performance</text>
+
+  <!-- Call and return arrows -->
+  <path d="M745 366 C770 366, 785 366, 812 366" fill="none" stroke="#2563EB" stroke-width="4" marker-end="url(#arrow-blue)"/>
+  <text x="779" y="348" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="650" fill="#1D4ED8">params</text>
+
+  <path d="M1115 366 C1138 366, 1155 366, 1182 366" fill="none" stroke="#2563EB" stroke-width="4" marker-end="url(#arrow-blue)"/>
+  <text x="1149" y="348" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="650" fill="#1D4ED8">call</text>
+
+  <path d="M1182 555 C1154 555, 1138 555, 1115 555" fill="none" stroke="#EA580C" stroke-width="4" marker-end="url(#arrow-orange)"/>
+  <text x="1149" y="582" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="650" fill="#C2410C">fills buffers</text>
+
+  <path d="M812 555 C785 555, 770 555, 745 555" fill="none" stroke="#EA580C" stroke-width="4" marker-end="url(#arrow-orange)"/>
+  <text x="779" y="582" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="650" fill="#C2410C">returns</text>
+
+  <!-- Result lane -->
+  <rect x="355" y="678" width="1145" height="66" rx="17" fill="#ECFDF5" stroke="#6EE7B7" stroke-width="2"/>
+  <text x="386" y="705" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700" fill="#065F46">OUTPUT BACK IN PYTHON</text>
+  <text x="386" y="729" font-family="Inter, Arial, sans-serif" font-size="15" fill="#334155">NumPy arrays: excitatory rates · inhibitory rates · BOLD · FIC → observables, plots, saved experiment results</text>
+
+  <!-- Build note -->
+  <rect x="355" y="772" width="1145" height="42" rx="12" fill="#F1F5F9"/>
+  <text x="927.5" y="798" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" fill="#475569"><tspan font-weight="700" fill="#334155">Build time:</tspan> g++ compiles the C++ wrapper into _DYN_FIC_DMF.so; the pinned Python/NumPy/Boost versions keep the binary interface compatible.</text>
+</svg>

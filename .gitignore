@@ -3,7 +3,6 @@ dynamic_fic_dmf_Cpp/Eigen/
 results/
 slurm/outputs/
 slurm/errors/
-data/
 /setup.py
 *egg-link
 *.pkl
